@@ -97,7 +97,7 @@ fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const any
         };
     };
     defer response.free(allocator);
-    //temp_allocator.free(url);
+    temp_allocator.free(url);
 
     switch (response.content) {
         .success => |body| {

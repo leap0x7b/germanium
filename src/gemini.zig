@@ -247,7 +247,8 @@ pub fn requestRaw(allocator: std.mem.Allocator, url: []const u8, options: Reques
         return error.InvalidUrl;
 
     var temp_allocator_buffer: [5000]u8 = undefined;
-    var temp_allocator = std.heap.FixedBufferAllocator.init(&temp_allocator_buffer);
+    var temp_allocator_state = std.heap.FixedBufferAllocator.init(&temp_allocator_buffer);
+    const temp_allocator = temp_allocator_state.allocator();
 
     const parsed_url = uri.parse(url) catch return error.InvalidUrl;
 
@@ -259,9 +260,9 @@ pub fn requestRaw(allocator: std.mem.Allocator, url: []const u8, options: Reques
     if (parsed_url.host == null)
         return error.MissingAuthority;
 
-    const hostname_z = try temp_allocator.allocator().dupeZ(u8, parsed_url.host.?);
+    const hostname_z = try temp_allocator.dupeZ(u8, parsed_url.host.?);
 
-    var socket = try network.connectToHost(temp_allocator.allocator(), hostname_z, parsed_url.port orelse 1965, .tcp);
+    var socket = try network.connectToHost(temp_allocator, hostname_z, parsed_url.port orelse 1965, .tcp);
     defer socket.close();
 
     var x509 = switch (options.verification) {
