@@ -65,7 +65,11 @@ fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const any
         },
     };
 
-    const url = try std.mem.concat(allocator, u8, &.{
+    var temp_buffer: [4096]u8 = undefined;
+    var temp_allocator_state = std.heap.FixedBufferAllocator.init(&temp_buffer);
+    const temp_allocator = temp_allocator_state.allocator();
+
+    const url = try std.mem.concat(temp_allocator, u8, &.{
         "gemini://",
         @ptrCast(*const []const u8, @alignCast(@alignOf(*const []const u8), captures)).*,
     });
