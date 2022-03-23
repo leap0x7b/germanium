@@ -24,8 +24,8 @@ pub fn main() !void {
         try std.net.Address.parseIp("127.0.0.1", 5000),
         {},
         comptime router.Router(void, &.{
-            builder.get("/:url", null, index),
-            builder.get("/static/*", null, fs.serve),
+            builder.get("/:url", []const u8, index),
+            builder.get("/static/*", null, serveFs),
         }),
     );
 }
@@ -123,6 +123,11 @@ fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const any
         },
         else => try resp.writer().print("unimplemented response type: {s}\n", .{response}),
     }
+}
+
+fn serveFs(_: void, resp: *http.Response, req: http.Request, captures: ?*const anyopaque) !void {
+    std.debug.assert(captures == null);
+    try fs.serve({}, resp, req);
 }
 
 test "basic test" {
