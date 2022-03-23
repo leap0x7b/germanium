@@ -305,10 +305,12 @@ pub fn requestRaw(allocator: std.mem.Allocator, url: []const u8, options: Reques
     errdefer response.public_key.deinit();
 
     response.certificate_chain = x509.certificates.toOwnedSlice();
-    for (response.certificate_chain) |cert| {
-        cert.deinit();
+    errdefer {
+        for (response.certificate_chain) |cert| {
+            cert.deinit();
+        }
+        //allocator.free(response.certificate_chain);
     }
-    errdefer allocator.free(response.certificate_chain);
 
     request_response catch |err| switch (err) {
         error.X509_NOT_TRUSTED => {
@@ -462,7 +464,7 @@ pub fn request(allocator: std.mem.Allocator, url: []const u8, options: RequestOp
                     redirection.target,
                 });
 
-                next_url = try std.mem.dupe(&url_buffer.allocator, u8, redirection.target);
+                next_url = try url_buffer.allocator().dupe(u8, redirection.target);
                 response.free(allocator);
             },
             else => return response,

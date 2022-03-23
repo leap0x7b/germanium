@@ -24,14 +24,14 @@ pub fn main() !void {
         try std.net.Address.parseIp("127.0.0.1", 5000),
         {},
         comptime router.Router(void, &.{
-            builder.get("/:url", []const u8, index),
+            builder.get("/*", []const u8, index),
             builder.get("/static/*", null, serveFs),
         }),
     );
 }
 
 fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const anyopaque) !void {
-    _ = req;
+    _ = captures;
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -65,16 +65,15 @@ fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const any
         },
     };
 
-    var temp_buffer: [4096]u8 = undefined;
-    var temp_allocator_state = std.heap.FixedBufferAllocator.init(&temp_buffer);
+    var temp_allocator_buffer: [5000]u8 = undefined;
+    var temp_allocator_state = std.heap.FixedBufferAllocator.init(&temp_allocator_buffer);
     const temp_allocator = temp_allocator_state.allocator();
 
-    const url = try std.mem.concat(temp_allocator, u8, &.{
-        "gemini://",
-        @ptrCast(*const []const u8, @alignCast(@alignOf(*const []const u8), captures)).*,
-    });
+    const url = try std.mem.concat(temp_allocator, u8, &.{ "gemini:/", req.path() });
 
-    var response = gemini.requestRaw(allocator, url, request_options) catch |err| {
+    std.log.info("{s}", .{url});
+
+    var response = gemini.request(allocator, url, request_options) catch |err| {
         return switch (err) {
             error.MissingAuthority => {
                 try resp.writer().writeAll("The url does not contain a host name!\n");
@@ -98,7 +97,7 @@ fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const any
         };
     };
     defer response.free(allocator);
-    allocator.free(url);
+    //temp_allocator.free(url);
 
     switch (response.content) {
         .success => |body| {
