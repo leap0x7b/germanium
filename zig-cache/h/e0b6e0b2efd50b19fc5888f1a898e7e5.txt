@@ -1,0 +1,2 @@
+4736528 5140713 1648023400636121151 03ccecced8dc582503214eed8d34d292 /data/data/com.termux/files/home/germanium/zig-cache/o/a120b4df6ab05c2bd121043a284b3670/build.o
+71114 4589093 1648023366136121149 7f8c2da64123fa7ee56576021fb4cfaa /data/data/com.termux/files/home/.cache/zig/o/5dccda440e00b3e326c3a740a2d2595b/libcompiler_rt.a

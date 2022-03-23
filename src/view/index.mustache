@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <form class="header">
+      <input type="url" id="url" placeholder="Enter a URL address" name="url" value="{{url}}"/>
+      <button type="submit">Go</button>
+    </form>
+    <main>
+      {{main}}
+    </main>
+    <footer class="footer">
+      <details>
+        <summary>Response headers</summary>
+        <table>
+          <tr>
+            <td><strong>Status code</strong></td>
+            <td>{{statusCode}} ({{statusString}})</td>
+          </tr>
+          <tr>
+            <td><strong>Meta</strong></td>
+            <td>{{meta}}</td>
+          </tr>
+        </table>
+      </details>
+      <p>Generated with Germanium {{germaniumVersion}} and built with Zig {{zigVersion}}</p>
+    </footer>
+  </body>
+</html>

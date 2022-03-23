@@ -1,0 +1,143 @@
+/* Box sizing rules */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Remove default margin */
+body,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+dl,
+dd,
+hr {
+  margin: 0;
+}
+
+/* Remove list styles on ul, ol elements with a list role, which suggests default styling will be removed */
+ul[role="list"],
+ol[role="list"] {
+  list-style: none;
+}
+
+/* Set core root defaults */
+html:focus-within {
+  scroll-behavior: smooth;
+}
+
+/* Set core body defaults */
+body {
+  min-height: 100vh;
+  text-rendering: optimizeSpeed;
+  line-height: 1.5;
+}
+
+/* A elements that don't have a class get default styles */
+a:not([class]) {
+  text-decoration-skip-ink: auto;
+}
+
+/* Make images easier to work with */
+img,
+picture {
+  max-width: 100%;
+  display: block;
+}
+
+/* Inherit fonts for inputs and buttons */
+input,
+button,
+textarea,
+select {
+  font: inherit;
+}
+
+/* Remove all animations and transitions for people that prefer not to see them */
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+   scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Helvetica Neue", "Arial Nova", Roboto, Cantarell, "Noto Sans", "DejaVu Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+.header {
+  display: flex;
+  width: 100%;
+  border-bottom: 1px solid hsl(0, 0%, 50%, .25);
+}
+
+.footer {
+  border-top: 1px solid hsl(0, 0%, 50%, .25);
+  font-size: 0.75rem;
+  color: hsl(0, 0%, 50%);
+}
+
+.header,
+main,
+.footer {
+  padding: 1rem;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="search"],
+input[type="url"],
+button {
+  padding-left: .725rem;
+  padding-right: .725rem;
+  padding-top: .25rem;
+  padding-bottom: .25rem;
+  border: 1px solid hsl(0, 0%, 50%, .25);
+  outline: none;
+  color: inherit;
+  background-color: inherit;
+}
+
+button {
+  background-color: hsl(0, 0%, 50%, .125);
+}
+
+button:hover {
+  background-color: hsl(0, 0%, 50%, .25);
+}
+
+input:focus {
+  border: 1px solid hsl(0, 0%, 50%, .75);
+  outline: 1px solid hsl(0, 0%, 50%, .75);
+}
+
+::placeholder {
+  color: hsl(0, 0%, 50%);
+  opacity: 1;
+}
+
+.header > input {
+  flex-grow: 1;
+  margin-right: .5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  html {
+    background-color: #111;
+    color: #fff;
+  }
+}
