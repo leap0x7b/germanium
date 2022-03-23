@@ -1,7 +1,7 @@
 const std = @import("std");
-const network = @import("zig-network");
-const uri = @import("zig-uri");
-const ssl = @import("zig-bearssl");
+const network = @import("network");
+const uri = @import("uri");
+const ssl = @import("bearssl");
 
 const TrustLevel = enum {
     all,
@@ -9,7 +9,7 @@ const TrustLevel = enum {
     tofu,
 };
 
-fn convertHexToArray(allocator: *std.mem.Allocator, input: []const u8) ![]u8 {
+fn convertHexToArray(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     if ((input.len % 2) != 0)
         return error.StringMustHaveEvenLength;
 
@@ -23,7 +23,7 @@ fn convertHexToArray(allocator: *std.mem.Allocator, input: []const u8) ![]u8 {
     return data;
 }
 
-fn parsePublicKeyFile(allocator: *std.mem.Allocator, file: std.fs.File) !ssl.PublicKey {
+fn parsePublicKeyFile(allocator: std.mem.Allocator, file: std.fs.File) !ssl.PublicKey {
     const instream = file.reader();
 
     // RSA is supported up to 4096 bits, so 512 byte.
@@ -124,7 +124,7 @@ pub const Response = struct {
     public_key: ssl.PublicKey,
 
     /// Releases the stored resources in the response.
-    fn free(self: Self, allocator: *std.mem.Allocator) void {
+    pub fn free(self: Self, allocator: std.mem.Allocator) void {
         allocator.free(self.certificate_chain);
         self.public_key.deinit();
 
@@ -229,12 +229,12 @@ pub const ResponseType = std.meta.TagType(Response.Content);
 
 const empty_trust_anchor_set = ssl.TrustAnchorCollection.init(std.testing.failing_allocator);
 
-const RequestOptions = struct {
+pub const RequestOptions = struct {
     memory_limit: usize = 100 * mega_bytes,
     verification: RequestVerification,
 };
 
-const RequestVerification = union(enum) {
+pub const RequestVerification = union(enum) {
     trust_anchor: ssl.TrustAnchorCollection,
     public_key: ssl.PublicKey,
     none: void,
@@ -242,7 +242,7 @@ const RequestVerification = union(enum) {
 
 /// Performs a raw request without any redirection handling or somilar.
 /// Either errors out when the request is malformed or returns a response from the server.
-pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: RequestOptions) !Response {
+pub fn requestRaw(allocator: std.mem.Allocator, url: []const u8, options: RequestOptions) !Response {
     if (url.len > 1024)
         return error.InvalidUrl;
 
@@ -259,9 +259,9 @@ pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: Reque
     if (parsed_url.host == null)
         return error.MissingAuthority;
 
-    const hostname_z = try std.mem.dupeZ(&temp_allocator.allocator, u8, parsed_url.host.?);
+    const hostname_z = try temp_allocator.allocator().dupeZ(u8, parsed_url.host.?);
 
-    var socket = try network.connectToHost(&temp_allocator.allocator, hostname_z, parsed_url.port orelse 1965, .tcp);
+    var socket = try network.connectToHost(temp_allocator.allocator(), hostname_z, parsed_url.port orelse 1965, .tcp);
     defer socket.close();
 
     var x509 = switch (options.verification) {
@@ -276,14 +276,14 @@ pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: Reque
     ssl_context.relocate();
     try ssl_context.reset(hostname_z, false);
 
-    // std.debug.warn("ssl initialized.\n", .{});
+    // std.log.warn("ssl initialized.\n", .{});
 
     var tcp_in = socket.reader();
     var tcp_out = socket.writer();
 
     var ssl_stream = ssl.initStream(ssl_context.getEngine(), &tcp_in, &tcp_out);
     defer if (ssl_stream.close()) {} else |err| {
-        std.debug.warn("error when closing the stream: {}\n", .{err});
+        std.log.warn("error when closing the stream: {}\n", .{err});
     };
 
     const in = ssl_stream.reader();
@@ -345,11 +345,11 @@ pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: Reque
     if (meta.len > 1024)
         return error.InvalidResponse;
 
-    // std.debug.warn("handshake complete: {}\n", .{response});
+    // std.log.warn("handshake complete: {}\n", .{response});
 
     response.content = switch (response_header[0]) { // primary status code
         '1' => blk: { // INPUT
-            var prompt = try std.mem.dupe(allocator, u8, meta);
+            var prompt = try allocator.dupe(u8, meta);
             errdefer allocator.free(prompt);
 
             break :blk Response.Content{
@@ -359,7 +359,7 @@ pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: Reque
             };
         },
         '2' => blk: { // SUCCESS
-            var mime = try std.mem.dupe(allocator, u8, meta);
+            var mime = try allocator.dupe(u8, meta);
             errdefer allocator.free(mime);
 
             var data = try in.readAllAlloc(allocator, options.memory_limit);
@@ -373,7 +373,7 @@ pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: Reque
             };
         },
         '3' => blk: { // REDIRECT
-            var target = try std.mem.dupe(allocator, u8, meta);
+            var target = try allocator.dupe(u8, meta);
             errdefer allocator.free(target);
 
             break :blk Response.Content{
@@ -387,7 +387,7 @@ pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: Reque
             };
         },
         '4' => blk: { // TEMPORARY FAILURE
-            var message = try std.mem.dupe(allocator, u8, meta);
+            var message = try allocator.dupe(u8, meta);
             errdefer allocator.free(message);
 
             break :blk Response.Content{
@@ -404,7 +404,7 @@ pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: Reque
             };
         },
         '5' => blk: { // PERMANENT FAILURE
-            var message = try std.mem.dupe(allocator, u8, meta);
+            var message = try allocator.dupe(u8, meta);
             errdefer allocator.free(message);
 
             break :blk Response.Content{
@@ -421,7 +421,7 @@ pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: Reque
             };
         },
         '6' => blk: { // CLIENT CERTIFICATE REQUIRED
-            var message = try std.mem.dupe(allocator, u8, meta);
+            var message = try allocator.dupe(u8, meta);
             errdefer allocator.free(message);
 
             break :blk Response.Content{
@@ -445,7 +445,7 @@ pub fn requestRaw(allocator: *std.mem.Allocator, url: []const u8, options: Reque
 }
 
 /// Processes redirects and such
-pub fn request(allocator: *std.mem.Allocator, url: []const u8, options: RequestOptions) !Response {
+pub fn request(allocator: std.mem.Allocator, url: []const u8, options: RequestOptions) !Response {
     var url_buffer = std.heap.ArenaAllocator.init(allocator);
     defer url_buffer.deinit();
 
@@ -457,7 +457,7 @@ pub fn request(allocator: *std.mem.Allocator, url: []const u8, options: RequestO
 
         switch (response.content) {
             .redirect => |redirection| {
-                std.debug.warn("iteration {} → {s}\n", .{
+                std.log.warn("iteration {} → {s}\n", .{
                     redirection_count,
                     redirection.target,
                 });
@@ -505,7 +505,7 @@ pub const CertificateValidator = struct {
         known_key: ssl.c.br_x509_knownkey_context,
     },
 
-    allocator: *std.mem.Allocator,
+    allocator: std.mem.Allocator,
     certificates: std.ArrayList(ssl.DERCertificate),
 
     current_cert_valid: bool = undefined,
@@ -515,7 +515,7 @@ pub const CertificateValidator = struct {
 
     options: Options = Options{},
 
-    fn initTrustAnchor(allocator: *std.mem.Allocator, list: ssl.TrustAnchorCollection) Self {
+    fn initTrustAnchor(allocator: std.mem.Allocator, list: ssl.TrustAnchorCollection) Self {
         return Self{
             .x509 = .{
                 .minimal = ssl.x509.Minimal.init(list).engine,
@@ -524,7 +524,7 @@ pub const CertificateValidator = struct {
             .certificates = std.ArrayList(ssl.DERCertificate).init(allocator),
         };
     }
-    fn initTrustAll(allocator: *std.mem.Allocator) Self {
+    fn initTrustAll(allocator: std.mem.Allocator) Self {
         return Self{
             .x509 = .{
                 .minimal = ssl.x509.Minimal.init(empty_trust_anchor_set).engine,
@@ -536,7 +536,7 @@ pub const CertificateValidator = struct {
             },
         };
     }
-    fn initPubKey(allocator: *std.mem.Allocator, key: ssl.PublicKey) Self {
+    fn initPubKey(allocator: std.mem.Allocator, key: ssl.PublicKey) Self {
         return Self{
             .x509 = .{
                 .known_key = ssl.x509.KnownKey.init(key, true, true).engine,
@@ -592,9 +592,9 @@ pub const CertificateValidator = struct {
 
     fn start_chain(ctx: [*c][*c]const ssl.c.br_x509_class, server_name: [*c]const u8) callconv(.C) void {
         const self = fromPointer(ctx);
-        // std.debug.warn("start_chain({0}, {1})\n", .{
+        // std.log.warn("start_chain({0}, {1})\n", .{
         //     ctx,
-        //     std.mem.spanZ(server_name),
+        //     std.mem.span(server_name),
         // });
 
         self.proxyCall(.start_chain, .{server_name});
@@ -609,12 +609,12 @@ pub const CertificateValidator = struct {
         }
         self.server_name = null;
 
-        self.server_name = std.mem.dupe(self.allocator, u8, std.mem.spanZ(server_name)) catch null;
+        self.server_name = self.allocator.dupe(u8, std.mem.span(server_name)) catch null;
     }
 
     fn start_cert(ctx: [*c][*c]const ssl.c.br_x509_class, length: u32) callconv(.C) void {
         const self = fromPointer(ctx);
-        // std.debug.warn("start_cert({0}, {1})\n", .{
+        // std.log.warn("start_cert({0}, {1})\n", .{
         //     ctx,
         //     length,
         // });
@@ -626,7 +626,7 @@ pub const CertificateValidator = struct {
 
     fn append(ctx: [*c][*c]const ssl.c.br_x509_class, buf: [*c]const u8, len: usize) callconv(.C) void {
         const self = fromPointer(ctx);
-        // std.debug.warn("append({0}, {1}, {2})\n", .{
+        // std.log.warn("append({0}, {1}, {2})\n", .{
         //     ctx,
         //     buf,
         //     len,
@@ -634,14 +634,14 @@ pub const CertificateValidator = struct {
         self.proxyCall(.append, .{ buf, len });
 
         self.temp_buffer.write(buf[0..len]) catch {
-            std.debug.warn("too much memory!\n", .{});
+            std.log.warn("too much memory!\n", .{});
             self.current_cert_valid = false;
         };
     }
 
     fn end_cert(ctx: [*c][*c]const ssl.c.br_x509_class) callconv(.C) void {
         const self = fromPointer(ctx);
-        // std.debug.warn("end_cert({})\n", .{
+        // std.log.warn("end_cert({})\n", .{
         //     ctx,
         // });
         self.proxyCall(.end_cert, .{});
@@ -649,7 +649,7 @@ pub const CertificateValidator = struct {
         if (self.current_cert_valid) {
             const cert = ssl.DERCertificate{
                 .allocator = self.allocator,
-                .data = std.mem.dupe(self.allocator, u8, self.temp_buffer.constSpan()) catch return, // sad, but no other choise
+                .data = self.allocator.dupe(u8, self.temp_buffer.constSpan()) catch return, // sad, but no other choise
             };
             errdefer cert.deinit();
 
@@ -661,12 +661,12 @@ pub const CertificateValidator = struct {
         const self = fromPointer(ctx);
 
         const err = self.proxyCall(.end_chain, .{});
-        // std.debug.warn("end_chain({}) → {}\n", .{
+        // std.log.warn("end_chain({}) → {}\n", .{
         //     ctx,
         //     err,
         // });
 
-        // std.debug.warn("Received {} certificates for {}!\n", .{
+        // std.log.warn("Received {} certificates for {}!\n", .{
         //     self.certificates.items.len,
         //     self.server_name,
         // });
@@ -688,7 +688,7 @@ pub const CertificateValidator = struct {
         const self = fromPointer(ctx);
 
         const pkey = self.proxyCall(.get_pkey, .{usages});
-        // std.debug.warn("get_pkey({}, {}) → {}\n", .{
+        // std.log.warn("get_pkey({}, {}) → {}\n", .{
         //     ctx,
         //     usages,
         //     pkey,
@@ -719,7 +719,7 @@ pub const CertificateValidator = struct {
         }
     }
 
-    pub fn extractPublicKey(self: Self, allocator: *std.mem.Allocator) !ssl.PublicKey {
+    pub fn extractPublicKey(self: Self, allocator: std.mem.Allocator) !ssl.PublicKey {
         var usages: c_uint = 0;
         const pkey = self.proxyCall(.get_pkey, .{usages});
         std.debug.assert(pkey != null);
@@ -795,21 +795,21 @@ fn runRawTestRequest(url: []const u8, expected_response: TestExpection) !void {
         defer response.free(std.testing.allocator);
 
         if (expected_response != .response) {
-            std.debug.warn("Expected error, but got {}\n", .{@as(ResponseType, response.content)});
+            std.log.warn("Expected error, but got {}\n", .{@as(ResponseType, response.content)});
             return error.UnexpectedResponse;
         }
 
         if (response.content != expected_response.response) {
-            std.debug.warn("Expected {}, but got {}\n", .{ expected_response.response, @as(ResponseType, response.content) });
+            std.log.warn("Expected {}, but got {}\n", .{ expected_response.response, @as(ResponseType, response.content) });
             return error.UnexpectedResponse;
         }
     } else |err| {
         if (expected_response != .err) {
-            std.debug.warn("Expected {}, but got error {}\n", .{ expected_response.response, err });
+            std.log.warn("Expected {}, but got error {}\n", .{ expected_response.response, err });
             return error.UnexpectedResponse;
         }
         if (err != expected_response.err) {
-            std.debug.warn("Expected error {}, but got error {}\n", .{ expected_response.err, err });
+            std.log.warn("Expected error {}, but got error {}\n", .{ expected_response.err, err });
             return error.UnexpectedResponse;
         }
     }
@@ -822,21 +822,21 @@ fn runTestRequest(url: []const u8, expected_response: TestExpection) !void {
         defer response.free(std.testing.allocator);
 
         if (expected_response != .response) {
-            std.debug.warn("Expected error, but got {}\n", .{@as(ResponseType, response.content)});
+            std.log.warn("Expected error, but got {}\n", .{@as(ResponseType, response.content)});
             return error.UnexpectedResponse;
         }
 
         if (response.content != expected_response.response) {
-            std.debug.warn("Expected {}, but got {}\n", .{ expected_response.response, @as(ResponseType, response.content) });
+            std.log.warn("Expected {}, but got {}\n", .{ expected_response.response, @as(ResponseType, response.content) });
             return error.UnexpectedResponse;
         }
     } else |err| {
         if (expected_response != .err) {
-            std.debug.warn("Expected {}, but got error {}\n", .{ expected_response.response, err });
+            std.log.warn("Expected {}, but got error {}\n", .{ expected_response.response, err });
             return error.UnexpectedResponse;
         }
         if (err != expected_response.err) {
-            std.debug.warn("Expected error {}, but got error {}\n", .{ expected_response.err, err });
+            std.log.warn("Expected error {}, but got error {}\n", .{ expected_response.err, err });
             return error.UnexpectedResponse;
         }
     }

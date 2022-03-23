@@ -1,7 +1,7 @@
 const std = @import("std");
 const network = @import("zig-network");
 const uri = @import("zig-uri");
-const ssl = @import("zig-bearssl");
+const ssl = @import("bearssl");
 const gemini = @import("./gemini.zig");
 const http = @import("apple_pie");
 const fs = http.FileServer;
@@ -14,7 +14,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    try fs.init(allocator, .{ .dir_path = "src/static", .base_path = "files" });
+    try fs.init(allocator, .{ .dir_path = "src/static", .base_path = "static" });
     defer fs.deinit();
 
     const builder = router.Builder(void);
@@ -40,7 +40,7 @@ fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const any
     var trust_anchors = ssl.TrustAnchorCollection.init(allocator);
     defer trust_anchors.deinit();
 
-    var file = try std.fs.cwd().openFile("cert.pem", .{ .read = true, .write = false });
+    var file = try std.fs.cwd().openFile("cert.pem", .{ .mode = .read_only });
     defer file.close();
 
     const pem_text = try file.reader().readAllAlloc(allocator, 1 << 20); // 1 MB
@@ -65,40 +65,36 @@ fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const any
         },
     };
 
-    const url = @ptrCast(
-        *const []const u8,
-        @alignCast(
-            @alignOf(*const []const u8),
-            captures,
-        ),
-    );
+    const url = try std.mem.concat(allocator, u8, &.{
+        "gemini://",
+        @ptrCast(*const []const u8, @alignCast(@alignOf(*const []const u8), captures)).*,
+    });
 
-    _ = url;
+    var response = gemini.requestRaw(allocator, url, request_options) catch |err| {
+        return switch (err) {
+            error.MissingAuthority => {
+                try resp.writer().writeAll("The url does not contain a host name!\n");
+            },
 
-    var response = gemini.requestRaw(allocator, "gemini://gemini.circumlunar.space/", request_options) catch |err| switch (err) {
-        error.MissingAuthority => {
-            try resp.writer().writeAll("The url does not contain a host name!\n");
-            //return 1;
-        },
+            error.UnsupportedScheme => {
+                try resp.writer().writeAll("The url scheme is not supported!\n");
+            },
 
-        error.UnsupportedScheme => {
-            try resp.writer().writeAll("The url scheme is not supported!\n");
-            //return 1;
-        },
+            error.CouldNotConnect => {
+                try resp.writer().writeAll("Failed to connect to the server. Is the address correct and the server reachable?\n");
+            },
 
-        error.CouldNotConnect => {
-            try resp.writer().writeAll("Failed to connect to the server. Is the address correct and the server reachable?\n");
-            //return 1;
-        },
+            error.BadServerName => {
+                try resp.writer().writeAll("The server certificate is not valid for the given host name!\n");
+            },
 
-        error.BadServerName => {
-            try resp.writer().writeAll("The server certificate is not valid for the given host name!\n");
-            //return 1;
-        },
-
-        //else => return err,
+            else => {
+                try resp.writer().print("{anytype}", .{err});
+            },
+        };
     };
     defer response.free(allocator);
+    allocator.free(url);
 
     switch (response.content) {
         .success => |body| {
