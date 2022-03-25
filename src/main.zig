@@ -32,6 +32,7 @@ pub fn main() !void {
 
 fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const anyopaque) !void {
     _ = captures;
+    _ = req;
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -60,16 +61,18 @@ fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const any
 
     const request_options = gemini.RequestOptions{
         .memory_limit = 268435456, // 256 MB
-        .verification = known_certificate_verification orelse gemini.RequestVerification{
-            .trust_anchor = trust_anchors,
+        .verification = gemini.RequestVerification{
+            //.trust_anchor = trust_anchors,
+            .none = {},
         },
     };
 
-    var temp_allocator_buffer: [5000]u8 = undefined;
-    var temp_allocator_state = std.heap.FixedBufferAllocator.init(&temp_allocator_buffer);
-    const temp_allocator = temp_allocator_state.allocator();
+    //var temp_allocator_buffer: [5000]u8 = undefined;
+    //var temp_allocator_state = std.heap.FixedBufferAllocator.init(&temp_allocator_buffer);
+    //const temp_allocator = temp_allocator_state.allocator();
 
-    const url = try std.mem.concat(temp_allocator, u8, &.{ "gemini:/", req.path() });
+    //const url = try std.mem.concat(temp_allocator, u8, &.{ "gemini:/", req.path() });
+    const url = "gemini://gemini.circumlunar.space/";
 
     std.log.info("{s}", .{url});
 
@@ -97,7 +100,7 @@ fn index(_: void, resp: *http.Response, req: http.Request, captures: ?*const any
         };
     };
     defer response.free(allocator);
-    temp_allocator.free(url);
+    //temp_allocator.free(url);
 
     switch (response.content) {
         .success => |body| {
